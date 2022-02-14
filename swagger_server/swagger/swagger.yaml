@@ -1,0 +1,296 @@
+openapi: 3.0.0
+info:
+  title: RSA API - Testing Regen Code
+  description: "CRC's RSA (Rural Spectrum Analysis) application is a web service that\
+    \ supports \nresearch efforts by providing an interface to generate RSA reports\
+    \ and monitor RSA jobs. \n\n\n\n\n Possible Future Iterations:\n* Queueing multiple\
+    \ RSA jobs \n* Caching \n* Validation of paremeters"
+  version: 1.0.0
+servers:
+- url: https://1.1.1.1/rsa
+tags:
+- name: RSA
+  description: access to RSA code
+- name: server
+  description: general server functionality
+paths:
+  /healthcheck:
+    get:
+      tags:
+      - server
+      summary: Healthcheck for Appliation Load Balancer
+      description: Healtch check response for server
+      operationId: healthcheck
+      responses:
+        "200":
+          description: OK
+      x-openapi-router-controller: swagger_server.controllers.server_controller
+  /rsa/job:
+    post:
+      tags:
+      - RSA
+      summary: Queues a New RSA Job
+      description: "Queues a new RSA job for the given parameters and returns the\
+        \ id of the newly \ncreated job.\n\nPrior to starting the job (e.g. just before\
+        \ executing), the job status \nshould become `inprogress` and following the\
+        \ successful completion and \nsaving of results, the job status will become\
+        \ `completed`. It is \nexpected that the RSA job would be in a `pending` state\
+        \ for only \nmoments.\n\nThe resultUrl, when appropriate, will contain a report\
+        \ of the RSA job."
+      operationId: post_job
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/body'
+      responses:
+        "200":
+          description: "Job Response\n\nContains data based on the status:\n- `pending`:\
+            \ returns the id for the job, time.creation\n- `inprogress`: same as for\
+            \ `pending` plus the time.start\n- `complete`: same as for `inprogress`\
+            \ plus the time.end and the resultUrl\n- `failed`: same as for `inprogress`plus\
+            \ the time.end and a failureMessage\n\n"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        "300":
+          description: Invalid input
+        "401":
+          description: Unauthorized
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.rsa_controller
+  /rsa/job/{job_id}:
+    get:
+      tags:
+      - RSA
+      summary: Get RSA Job Status/Result
+      description: "Gets the job status/result\n\nThe resultUrl, when appropriate,\
+        \ will contain a report of the RSA job."
+      operationId: get_job
+      parameters:
+      - name: job_id
+        in: path
+        description: Id of the RSA job
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: Returns OK if job has been successfully deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        "300":
+          description: Job ID not found
+        "401":
+          description: Unauthorized
+      x-openapi-router-controller: swagger_server.controllers.rsa_controller
+  /rsa/{job_id}:
+    delete:
+      tags:
+      - RSA
+      summary: Delete an RSA job
+      description: "Deletes an RSA job, and will return success if job has been successfully\
+        \ deleted."
+      operationId: delete_job
+      parameters:
+      - name: job_id
+        in: path
+        description: Id of the RSA job
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+      responses:
+        "200":
+          description: OK
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+      x-openapi-router-controller: swagger_server.controllers.rsa_controller
+components:
+  schemas:
+    jobResult:
+      required:
+      - id
+      - status
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Id of the job
+        status:
+          type: string
+          description: The current status of the job
+          enum:
+          - pending
+          - inprogress
+          - completed
+          - failed
+        progressMessage:
+          type: string
+          description: The current progress of the job
+        failureMessage:
+          type: string
+          description: "If the job status is `failed`, this will contain the failure\
+            \ message."
+        time:
+          $ref: '#/components/schemas/jobResult_time'
+        resultUrl:
+          type: string
+          description: "Signed S3 URL containing the result of the job - only present\
+            \ if \nstatus is `completed`. The URL will only be valid for 30 minutes\
+            \ \nfrom the time of calling this method. See the parent method for \n\
+            details on result contents."
+      description: The status and/or result of the given job
+    body:
+      required:
+      - name
+      - propagationModel
+      - servicesAreas
+      type: object
+      properties:
+        name:
+          type: string
+          description: Short name or description of the job
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/body_services'
+        operators:
+          type: array
+          items:
+            type: string
+        servicesAreas:
+          type: array
+          items:
+            type: string
+        aggregationLevel:
+          type: string
+          enum:
+          - grid
+          - Tier1
+          - Tier2
+          - Tier3
+          - Tier4
+          - Tier5
+        propagationModel:
+          $ref: '#/components/schemas/body_propagationModel'
+        datasetDate:
+          type: string
+          description: The date to be used to retrieve the datasets used for RSA analysis
+          format: date
+        resultUrl:
+          type: string
+          description: "Signed S3 URL containing the result of the job - only present\
+            \ if \nstatus is `completed`. The URL will only be valid for 30 minutes\
+            \ \nfrom the time of calling this method. See the parent method for \n\
+            details on result contents."
+      example:
+        name: Test1
+        services:
+        - service: CELL
+          blocks:
+          - A
+          - B
+        - service: PCS
+          blocks:
+          - A
+        operators:
+        - BELL
+        - TELUS
+        serviceAreas:
+        - "ON"
+        - QC
+        resultUrl: https://lixar-propagation-shared-s3-results.s3.amazonaws.com/result/covlib/
+        aggregationLevel: Tier4
+        datasetDate: 2021-11-17
+        propagationModel:
+          model: fixedRadius
+          parameters:
+            radiusKM: 10
+    inline_response_200:
+      description: Job Result for RSA job
+      allOf:
+      - $ref: '#/components/schemas/jobResult'
+    jobResult_time:
+      required:
+      - creation
+      type: object
+      properties:
+        creation:
+          type: string
+          description: The time at which the job was created in pending status
+          format: date-time
+        start:
+          type: string
+          description: The time at which the job entered `inprogress` status
+          format: date-time
+        end:
+          type: string
+          description: The time at which the job entered `completed` or `failed` status
+          format: date-time
+      description: Relevant job timestamps
+    fixedRadius_prop_model_parameters:
+      required:
+      - radiusKM
+      type: object
+      properties:
+        radiusKM:
+          type: number
+    longleyRice_prop_model_parameters:
+      type: object
+      properties:
+        serviceThreshold:
+          type: number
+        surfaceRefractivity:
+          type: number
+        groundDielectricConst:
+          type: number
+        groundConductivity:
+          type: number
+        climaticZone:
+          type: string
+        confidenceLevel:
+          type: number
+        timeAvail:
+          type: number
+        rxHeight:
+          type: number
+        elevDataSamplingResKm:
+          type: number
+        elevSource:
+          type: string
+    body_services:
+      type: object
+      properties:
+        service:
+          type: string
+        blocks:
+          type: array
+          items:
+            type: string
+    body_propagationModel:
+      required:
+      - model
+      - parameters
+      type: object
+      properties:
+        model:
+          type: string
+          enum:
+          - fixedRadius
+          - longleyRice:covlib
+        parameters:
+          type: object
+          description: Parameters that correspond to the selected algorithm.
+          oneOf:
+          - $ref: '#/components/schemas/fixedRadius_prop_model_parameters'
+          - $ref: '#/components/schemas/longleyRice_prop_model_parameters'
+
